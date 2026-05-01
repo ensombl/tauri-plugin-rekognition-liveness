@@ -10,7 +10,7 @@ Tauri's IPC is text-encoded. Streaming raw camera frames across the JS↔native 
 
 ```bash
 # JS half (workspace dep)
-pnpm add tauri-plugin-rekognition-liveness-api
+pnpm add @ensombl/tauri-plugin-rekognition-liveness-api
 ```
 
 ```toml
@@ -171,7 +171,7 @@ Re-run the script when:
 ## Usage
 
 ```ts
-import { detectLiveness } from 'tauri-plugin-rekognition-liveness-api';
+import { detectLiveness } from '@ensombl/tauri-plugin-rekognition-liveness-api';
 
 // 1. Backend creates a session and mints scoped STS credentials.
 const { sessionId, region, credentials } = await fetch('/api/liveness/start')

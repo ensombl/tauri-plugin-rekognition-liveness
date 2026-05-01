@@ -1,5 +1,5 @@
 <script>
-  import { detectLiveness } from 'tauri-plugin-rekognition-liveness-api';
+  import { detectLiveness } from '@ensombl/tauri-plugin-rekognition-liveness-api';
   import {
     createLivenessSession,
     fetchLivenessResults,
