@@ -19,9 +19,13 @@ on:
         type: string
 
 permissions:
-  # `id-token: write` is required for npm provenance — npm uses GitHub's
-  # OIDC token to sign the package and link it to this workflow run on the
-  # public npm UI. No other repo write permissions needed.
+  # `id-token: write` does double duty here:
+  # 1. Authentication: npm Trusted Publishing reads GitHub's OIDC token to
+  #    authenticate the publish — no NPM_TOKEN secret involved. The trusted
+  #    publisher must be configured on npm at the org or package level
+  #    pointing at this exact `<owner>/<repo>` + workflow filename.
+  # 2. Provenance: `--provenance` signs the package with the same OIDC token
+  #    so the npm listing shows a verified link back to this workflow run.
   contents: read
   id-token: write
 
@@ -45,10 +49,14 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # npm 11.5+ is required for Trusted Publishing's OIDC flow. Node 24
+          # ships npm 11.x; staying on Node 20 (npm 10) would force us back
+          # onto an NPM_TOKEN secret.
+          node-version: 24
           cache: pnpm
-          # Writes ~/.npmrc with `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`
-          # so the publish step picks up the token from env.
+          # Setting registry-url tells the npm/pnpm CLI which registry to
+          # exchange the OIDC token against. No `_authToken=` is written
+          # because we're not using a long-lived token.
           registry-url: https://registry.npmjs.org
 
       - name: Verify package.json version matches release tag
@@ -68,12 +76,18 @@ jobs:
         run: pnpm check-types
 
       - name: Publish to npm
-        # --provenance attaches an OIDC-signed attestation linking the published
-        # tarball to this workflow run; --no-git-checks skips pnpm's clean-tree
-        # validation (we're on a detached tag checkout, not a branch);
-        # --access public is required for unscoped first-time publish.
-        # The `prepack` hook (defined in package.json) runs rollup → dist-js
-        # before the tarball is assembled, so no separate build step is needed.
+        # Trusted Publishing — pnpm reads the GitHub OIDC token from the
+        # runner's `ACTIONS_ID_TOKEN_REQUEST_*` env vars (set by the
+        # `id-token: write` permission), exchanges it at npm's registry
+        # for a short-lived publish token, and uses that. No long-lived
+        # secret needed.
+        #
+        # `--provenance` signs the same OIDC token into the published
+        # package's provenance attestation; `--no-git-checks` skips pnpm's
+        # clean-tree check (we're on a detached tag checkout, not a branch);
+        # `--access public` is required for first-time publish of a scoped
+        # package (npm defaults `@scope/...` to private).
+        #
+        # The `prepack` hook in package.json runs rollup → dist-js before
+        # the tarball is assembled, so no separate build step is needed.
         run: pnpm publish --no-git-checks --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
