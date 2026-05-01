@@ -4,6 +4,10 @@ version = "0.1.0"
 description = "Standalone demo of tauri-plugin-rekognition-liveness."
 edition = "2021"
 rust-version = "1.77.2"
+license = "MIT"
+# Refuse `cargo publish` from the demo directory — keep crates.io clean of
+# the demo wrapper. The plugin crate at the repo root is the publishable one.
+publish = false
 
 [lib]
 name = "tauri_plugin_rekognition_liveness_demo_lib"

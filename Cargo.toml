@@ -1,12 +1,61 @@
 [package]
 name = "tauri-plugin-rekognition-liveness"
 version = "0.1.0"
-authors = ["Certless"]
+authors = [
+  "SoSweetHam <sosweetham@gmail.com>",
+  "Ensombl Team <team@ensombl.io>",
+]
 license = "MIT"
 description = "AWS Rekognition Face Liveness for Tauri 2 — native Android/iOS UI bindings."
 edition = "2021"
 rust-version = "1.77.2"
-exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
+readme = "README.md"
+homepage = "https://github.com/sosweetham/tauri-plugin-rekognition-liveness"
+repository = "https://github.com/sosweetham/tauri-plugin-rekognition-liveness"
+documentation = "https://docs.rs/tauri-plugin-rekognition-liveness"
+# crates.io: max 5, only [a-z0-9-_], must start with a letter, ≤20 chars each.
+keywords = ["tauri", "tauri-plugin", "rekognition", "liveness", "aws"]
+# Must be from https://crates.io/category_slugs — max 5.
+categories = ["api-bindings", "authentication", "gui"]
+# Mirror of the npm package's `files` whitelist — keep the published crate
+# small. Excludes the iOS/Android scaffolding the plugin ships separately
+# (ios/Package.swift's deps + android/build.gradle.kts pull from the package
+# manifest, but the source goes via the published artefact tree); excludes
+# the demo, vendored upstream amplify-ui-swift-liveness, build outputs, and
+# JS-side files. `links = "tauri-plugin-rekognition-liveness"` is not a path.
+exclude = [
+  "/examples",
+  "/dist-js",
+  "/guest-js",
+  "/node_modules",
+  "/scripts",
+  "/.tauri",
+  "/ios/.build",
+  "/android/build",
+  "/android/.gradle",
+  "/android/.tauri",
+  # Upstream bloat in the vendored amplify-ui-swift-liveness — only the
+  # FaceLiveness target's Sources + Package.swift + LICENSE/NOTICE are needed
+  # at consumer build time (referenced by ios/Package.swift's path-based dep).
+  "/vendor/amplify-ui-swift-liveness/Tests",
+  "/vendor/amplify-ui-swift-liveness/HostApp",
+  "/vendor/amplify-ui-swift-liveness/fastlane",
+  "/vendor/amplify-ui-swift-liveness/Gemfile",
+  "/vendor/amplify-ui-swift-liveness/Gemfile.lock",
+  "/vendor/amplify-ui-swift-liveness/CHANGELOG.md",
+  "/vendor/amplify-ui-swift-liveness/CODE_OF_CONDUCT.md",
+  "/vendor/amplify-ui-swift-liveness/CONTRIBUTING.md",
+  "/vendor/amplify-ui-swift-liveness/codecov.yml",
+  "/vendor/amplify-ui-swift-liveness/.github",
+  "/vendor/amplify-ui-swift-liveness/.swiftpm",
+  "package.json",
+  "pnpm-lock.yaml",
+  "tsconfig.json",
+  "rollup.config.js",
+]
+# `links` declares ownership of the native library name to crates.io's build
+# system so two crates can't claim the same `cargo:rustc-link-…` namespace.
+# Keep this aligned with the package name.
 links = "tauri-plugin-rekognition-liveness"
 
 [dependencies]
