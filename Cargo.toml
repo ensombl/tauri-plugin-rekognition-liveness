@@ -1,0 +1,18 @@
+[package]
+name = "tauri-plugin-rekognition-liveness"
+version = "0.1.0"
+authors = ["Certless"]
+license = "MIT"
+description = "AWS Rekognition Face Liveness for Tauri 2 — native Android/iOS UI bindings."
+edition = "2021"
+rust-version = "1.77.2"
+exclude = ["/examples", "/dist-js", "/guest-js", "/node_modules"]
+links = "tauri-plugin-rekognition-liveness"
+
+[dependencies]
+tauri = { version = "2.10" }
+serde = "1.0"
+thiserror = "2"
+
+[build-dependencies]
+tauri-plugin = { version = "2.5", features = ["build"] }

@@ -1,0 +1,12 @@
+"$schema" = "schemas/schema.json"
+
+[default]
+description = """
+Default permissions exposing the AWS Face Liveness detection command.
+
+#### Granted Permissions
+
+It allows access to the `detect_liveness` command — opens the native
+Amplify Liveness UI on Android/iOS and resolves with a single status object.
+"""
+permissions = ["allow-detect-liveness"]

@@ -1,0 +1,13 @@
+# Automatically generated - DO NOT EDIT!
+
+"$schema" = "../../schemas/schema.json"
+
+[[permission]]
+identifier = "allow-detect-liveness"
+description = "Enables the detect_liveness command without any pre-configured scope."
+commands.allow = ["detect_liveness"]
+
+[[permission]]
+identifier = "deny-detect-liveness"
+description = "Denies the detect_liveness command without any pre-configured scope."
+commands.deny = ["detect_liveness"]
