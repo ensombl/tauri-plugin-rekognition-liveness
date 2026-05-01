@@ -10,8 +10,8 @@ description = "AWS Rekognition Face Liveness for Tauri 2 — native Android/iOS 
 edition = "2021"
 rust-version = "1.77.2"
 readme = "README.md"
-homepage = "https://github.com/sosweetham/tauri-plugin-rekognition-liveness"
-repository = "https://github.com/sosweetham/tauri-plugin-rekognition-liveness"
+homepage = "https://github.com/ensombl/tauri-plugin-rekognition-liveness"
+repository = "https://github.com/ensombl/tauri-plugin-rekognition-liveness"
 documentation = "https://docs.rs/tauri-plugin-rekognition-liveness"
 # crates.io: max 5, only [a-z0-9-_], must start with a letter, ≤20 chars each.
 keywords = ["tauri", "tauri-plugin", "rekognition", "liveness", "aws"]

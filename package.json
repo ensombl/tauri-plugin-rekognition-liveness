@@ -7,13 +7,13 @@
   "contributors": [
     "Ensombl Team <team@ensombl.io>"
   ],
-  "homepage": "https://github.com/sosweetham/tauri-plugin-rekognition-liveness#readme",
+  "homepage": "https://github.com/ensombl/tauri-plugin-rekognition-liveness#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/sosweetham/tauri-plugin-rekognition-liveness.git"
+    "url": "git+https://github.com/ensombl/tauri-plugin-rekognition-liveness.git"
   },
   "bugs": {
-    "url": "https://github.com/sosweetham/tauri-plugin-rekognition-liveness/issues"
+    "url": "https://github.com/ensombl/tauri-plugin-rekognition-liveness/issues"
   },
   "type": "module",
   "types": "./dist-js/index.d.ts",
@@ -55,8 +55,8 @@
   },
   "scripts": {
     "build": "rollup -c",
-    "prepublishOnly": "pnpm build",
-    "check-types": "tsc --noEmit"
+    "check-types": "tsc --noEmit",
+    "prepack": "pnpm build"
   },
   "dependencies": {
     "@tauri-apps/api": ">=2.0.0"
