@@ -1,0 +1,79 @@
+name: Publish npm package
+
+# Triggers on a published GitHub release. The release tag (e.g. `v0.2.0`) must
+# match `package.json`'s `version` field — this workflow's first step bails
+# out otherwise so npm doesn't end up out of sync with git tags.
+#
+# `workflow_dispatch` lets you re-publish a specific tag manually from the
+# Actions tab if the release-triggered run failed mid-way and you need to
+# retry without recreating the release.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to publish (e.g. v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  # `id-token: write` is required for npm provenance — npm uses GitHub's
+  # OIDC token to sign the package and link it to this workflow run on the
+  # public npm UI. No other repo write permissions needed.
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          # On `release: published` the tag is in github.event.release.tag_name.
+          # On manual dispatch we read it from inputs. Either way we check
+          # out the exact tag, not the default branch.
+          ref: ${{ github.event.release.tag_name || inputs.tag }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          # Writes ~/.npmrc with `//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}`
+          # so the publish step picks up the token from env.
+          registry-url: https://registry.npmjs.org
+
+      - name: Verify package.json version matches release tag
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          TAG_VERSION="${TAG#v}"
+          if [ "$PKG_VERSION" != "$TAG_VERSION" ]; then
+            echo "::error::package.json version ($PKG_VERSION) does not match release tag ($TAG_VERSION). Bump package.json + Cargo.toml together before tagging." >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type-check
+        run: pnpm check-types
+
+      - name: Publish to npm
+        # --provenance attaches an OIDC-signed attestation linking the published
+        # tarball to this workflow run; --no-git-checks skips pnpm's clean-tree
+        # validation (we're on a detached tag checkout, not a branch);
+        # --access public is required for unscoped first-time publish.
+        # The `prepack` hook (defined in package.json) runs rollup → dist-js
+        # before the tarball is assembled, so no separate build step is needed.
+        run: pnpm publish --no-git-checks --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
