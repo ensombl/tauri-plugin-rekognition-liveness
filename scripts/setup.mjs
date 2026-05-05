@@ -225,6 +225,48 @@ function patchProjectYml(tauriDir, dryRun) {
     skip(`project.yml: "Copy SwiftPM resource bundles" already present`);
   }
 
+  // 5. iOS code-signing: DEVELOPMENT_TEAM
+  //
+  // Required for `xcodebuild` to produce a signed app bundle on a real
+  // device. Without it, every build dies with
+  //   error: Signing for "<target>" requires a development team.
+  //
+  // Preserve any pre-existing value verbatim (whether the user wrote it
+  // manually or a prior setup run injected it). Only inject when the line
+  // is missing AND `APPLE_DEVELOPMENT_TEAM` is in the env. If both are
+  // absent, warn so the user knows what to set; we never silently replace.
+  if (/^\s+DEVELOPMENT_TEAM:/m.test(content)) {
+    skip(`project.yml: DEVELOPMENT_TEAM already set — preserving`);
+  } else {
+    const team = process.env.APPLE_DEVELOPMENT_TEAM?.trim();
+    if (!team) {
+      warn(
+        `project.yml: DEVELOPMENT_TEAM unset. iOS code signing will fail` +
+          ` until you set APPLE_DEVELOPMENT_TEAM (your 10-char team ID from` +
+          ` https://developer.apple.com/account → Membership) and re-run setup.`,
+      );
+    } else {
+      const anchor = /(^\s+groups:\s*\[app\]\n)/m;
+      if (anchor.test(content)) {
+        content = content.replace(
+          anchor,
+          `        # Added by tauri-plugin-rekognition-liveness setup, sourced from\n` +
+            `        # the APPLE_DEVELOPMENT_TEAM env var. Required for iOS code\n` +
+            `        # signing. Setup preserves a pre-existing value, so feel free\n` +
+            `        # to overwrite this line manually if you don't want to use the\n` +
+            `        # env var.\n` +
+            `        DEVELOPMENT_TEAM: ${team}\n$1`,
+        );
+        changed = true;
+        ok(`project.yml: set DEVELOPMENT_TEAM = ${team}`);
+      } else {
+        warn(
+          `project.yml: 'groups: [app]' anchor not found — skipped DEVELOPMENT_TEAM`,
+        );
+      }
+    }
+  }
+
   if (changed) {
     if (!dryRun) writeFileSync(path, content);
     return true;
@@ -308,14 +350,22 @@ function patchAndroidAppGradle(tauriDir, dryRun) {
   // Ensure compileOptions { ... } exists and has the three settings desugaring needs.
   // Tauri's freshly-generated app/build.gradle.kts doesn't include compileOptions
   // at all, so we either insert into the existing block or synthesise the whole one.
+  //
+  // Java 17 — matches AGP 8.x defaults and what Compose Compiler 2.x / Kotlin
+  // 2.x / Amplify Liveness 1.10 are built against. Earlier versions of this
+  // script set 1_8 with a "needed for desugaring" comment that was incorrect —
+  // `coreLibraryDesugaring` is independent of source/target compat. Java 21
+  // (current Android Studio + most CI build JDKs) emits a hard deprecation
+  // warning for source/target=8 every build; 17 silences it without
+  // regressing anything.
   if (/isCoreLibraryDesugaringEnabled\s*=\s*true/.test(content)) {
     skip(`android app gradle: isCoreLibraryDesugaringEnabled already true`);
   } else if (/compileOptions\s*\{/.test(content)) {
     content = content.replace(
       /(compileOptions\s*\{\s*\n)/,
       `$1        isCoreLibraryDesugaringEnabled = true\n` +
-        `        sourceCompatibility = JavaVersion.VERSION_1_8\n` +
-        `        targetCompatibility = JavaVersion.VERSION_1_8\n`,
+        `        sourceCompatibility = JavaVersion.VERSION_17\n` +
+        `        targetCompatibility = JavaVersion.VERSION_17\n`,
     );
     changed = true;
     ok(`android app gradle: enabled isCoreLibraryDesugaringEnabled in existing compileOptions`);
@@ -331,8 +381,8 @@ function patchAndroidAppGradle(tauriDir, dryRun) {
           `        // Required for Amplify Liveness — its libs use java.time.*\n` +
           `        // which Android desugars for pre-API-26.\n` +
           `        isCoreLibraryDesugaringEnabled = true\n` +
-          `        sourceCompatibility = JavaVersion.VERSION_1_8\n` +
-          `        targetCompatibility = JavaVersion.VERSION_1_8\n` +
+          `        sourceCompatibility = JavaVersion.VERSION_17\n` +
+          `        targetCompatibility = JavaVersion.VERSION_17\n` +
           `    }\n$1`,
       );
       changed = true;
@@ -340,6 +390,29 @@ function patchAndroidAppGradle(tauriDir, dryRun) {
     } else {
       warn(`android app gradle: no kotlinOptions anchor found — please add a compileOptions block manually`);
     }
+  }
+
+  // Idempotently upgrade an already-patched 1_8 to 17. Earlier versions of
+  // this script wrote VERSION_1_8 — re-running setup against an existing
+  // patched project should bump it without manual intervention. We don't
+  // touch values higher than 17 (e.g. user explicitly set 21) — those are
+  // intentional.
+  const javaVerRegex =
+    /(sourceCompatibility|targetCompatibility)\s*=\s*JavaVersion\.VERSION_1_8/g;
+  if (javaVerRegex.test(content)) {
+    content = content.replace(
+      javaVerRegex,
+      (_, key) => `${key} = JavaVersion.VERSION_17`,
+    );
+    changed = true;
+    ok(`android app gradle: bumped existing source/targetCompatibility 1_8 → 17`);
+  }
+  // Also bump kotlinOptions.jvmTarget if it's still pinned at "1.8".
+  const jvmTargetRegex = /(jvmTarget\s*=\s*")1\.8(")/;
+  if (jvmTargetRegex.test(content)) {
+    content = content.replace(jvmTargetRegex, `$117$2`);
+    changed = true;
+    ok(`android app gradle: bumped kotlinOptions.jvmTarget "1.8" → "17"`);
   }
 
   // Bump or add coreLibraryDesugaring desugar_jdk_libs >= 2.1.5

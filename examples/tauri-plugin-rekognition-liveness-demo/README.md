@@ -24,28 +24,18 @@ pnpm install
 pnpm tauri dev
 
 # Android (real device, USB debugging on)
-pnpm tauri android init    # one-time scaffold — creates src-tauri/gen/android/
+pnpm tauri android init                            # one-time scaffold — creates src-tauri/gen/android/
+pnpm exec tauri-plugin-rekognition-liveness setup  # patches gen/android for desugaring + Kotlin 2.2 + 16 KB pages
 pnpm tauri android dev
 
 # iOS (real device, signed)
-pnpm tauri ios init        # one-time scaffold — creates src-tauri/gen/apple/
+pnpm tauri ios init                                # one-time scaffold — creates src-tauri/gen/apple/
+pnpm exec tauri-plugin-rekognition-liveness setup  # patches gen/apple/project.yml + runs xcodegen
+./scripts/bootstrap-ios-caches.sh                  # ONE-TIME: partial-clones aws-sdk-swift so SwiftPM doesn't pull a 5 GB monorepo on first build
 pnpm tauri ios dev
 ```
 
-> **After every `tauri android init`** the auto-generated `src-tauri/gen/android/app/build.gradle.kts` needs **core library desugaring enabled** for the Amplify Liveness deps. The repo ships this patch already applied; if you regenerate, re-apply:
->
-> - Add to the `android { ... }` block:
->   ```kotlin
->   compileOptions {
->       isCoreLibraryDesugaringEnabled = true
->       sourceCompatibility = JavaVersion.VERSION_1_8
->       targetCompatibility = JavaVersion.VERSION_1_8
->   }
->   ```
-> - Add to the `dependencies { ... }` block:
->   ```kotlin
->   coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
->   ```
+> **Re-run `pnpm exec tauri-plugin-rekognition-liveness setup` after every `tauri android init` / `tauri ios init`** — those commands regenerate `gen/android` / `gen/apple` from Tauri's templates and wipe the patches the plugin needs (core library desugaring, Kotlin 2.2.0, 16 KB page alignment, iOS deployment target 15+, NSCameraUsageDescription, the SwiftPM bundle copy step). The setup script is idempotent and applies all of these in one go. See the plugin's main README for what each patch does.
 
 ## What you do in the UI
 

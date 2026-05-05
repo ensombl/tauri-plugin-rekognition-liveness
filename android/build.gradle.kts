@@ -32,13 +32,19 @@ android {
         }
     }
     compileOptions {
-        // Match Tauri's auto-generated app module JVM target (1.8) so
-        // source/target compat is consistent across consumer and submodule.
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        // JDK 17 is the AGP 8.x default and what the rest of the modern
+        // Android toolchain (Compose Compiler 2.x, Kotlin 2.x, Amplify
+        // Liveness 1.10) is built against. Java 21 (used as the build JDK
+        // by recent Android Studio / command-line gradle) emits
+        // source/target=8 deprecation warnings; bumping clears them.
+        // Tauri's auto-generated consumer app module is unaffected — DEX
+        // conversion handles per-module bytecode levels independently, so
+        // an app on a lower target still consumes our class files fine.
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "17"
     }
     buildFeatures {
         buildConfig = true

@@ -32,6 +32,25 @@ export interface LivenessCredentials {
  */
 export type LivenessCamera = 'front' | 'back';
 
+/**
+ * Per-session text overrides applied to the Amplify Liveness UI. Pass any
+ * subset; unset fields keep the SDK's built-in copy. Useful for re-wording
+ * prompts that don't fit your context — e.g. a rear-camera gate-verification
+ * flow where "Center your face" reads as if it's about the operator instead
+ * of the third party being scanned.
+ *
+ * The plugin maps each platform-neutral key here to the matching Amplify
+ * resource on Android and localizable key on iOS, applies the override for
+ * the duration of this `detectLiveness` call only, and clears it afterwards.
+ */
+export interface LivenessDisplayText {
+  /**
+   * Replaces the SDK's "Center your face" prompt shown on the get-ready /
+   * face-positioning screen.
+   */
+  centerFace?: string;
+}
+
 export interface DetectLivenessRequest {
   /** SessionId returned by your backend's `CreateFaceLivenessSession` call. */
   sessionId: string;
@@ -43,6 +62,11 @@ export interface DetectLivenessRequest {
    * See {@link LivenessCamera} for the back-camera caveat.
    */
   camera?: LivenessCamera;
+  /**
+   * Optional UI-text overrides for this session. See
+   * {@link LivenessDisplayText} for the supported keys.
+   */
+  displayText?: LivenessDisplayText;
 }
 
 export type LivenessStatus = 'success' | 'failed' | 'cancelled' | 'error';

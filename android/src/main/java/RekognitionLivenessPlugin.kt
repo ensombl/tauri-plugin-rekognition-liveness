@@ -3,7 +3,9 @@ package app.tauri.rekognitionliveness
 import android.Manifest
 import android.app.Activity
 import android.content.Context
+import android.content.ContextWrapper
 import android.content.pm.PackageManager
+import android.content.res.Resources
 import android.graphics.Color
 import android.graphics.drawable.Drawable
 import android.view.ViewGroup
@@ -17,8 +19,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.AbstractComposeView
+import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
@@ -49,6 +54,12 @@ class LivenessCredentialsArgs {
 }
 
 @InvokeArg
+class LivenessDisplayTextArgs {
+    /** Overrides the SDK's "Center your face" prompt. */
+    var centerFace: String? = null
+}
+
+@InvokeArg
 class DetectLivenessArgs {
     lateinit var sessionId: String
     lateinit var region: String
@@ -61,6 +72,91 @@ class DetectLivenessArgs {
      * `var?` rather than `lateinit` because the JS caller may omit it.
      */
     var camera: String? = null
+
+    /**
+     * Optional UI-text overrides applied for the duration of this session.
+     * Lets the consuming app re-word prompts that don't fit its context (e.g.
+     * a rear-camera-at-the-gate flow re-wording "Center your face").
+     */
+    var displayText: LivenessDisplayTextArgs? = null
+}
+
+/**
+ * Maps platform-neutral display-text keys (the names exposed on the
+ * `displayText` JS arg) to Amplify Liveness Android string resource names.
+ * Resource ids are looked up at runtime via `Resources.getIdentifier` —
+ * library AAR `R.string` ids are remapped to consumer-app ids during
+ * resource-merging at build time, so the consumer sees the same id the SDK
+ * sees, and overriding `getString(id)` for that id wins everywhere.
+ */
+private val DISPLAY_TEXT_KEY_MAP = mapOf(
+    "centerFace" to "amplify_ui_liveness_get_ready_center_face_label",
+)
+
+/**
+ * Drop-in [Resources] subclass that returns caller-supplied strings for a
+ * fixed set of resource ids and falls through to the wrapped resources for
+ * everything else. Constructed once per session.
+ *
+ * The `Resources(AssetManager, DisplayMetrics, Configuration)` constructor
+ * has been deprecated since API 18 with the guidance "apps should not
+ * construct Resources directly", but Android has never offered a public
+ * alternative for *subclassing* Resources — every framework / Compose
+ * helper that needs to intercept string lookup ends up here. Suppression is
+ * the canonical fix; behaviour is stable across all supported API levels.
+ */
+@Suppress("DEPRECATION")
+private class StringOverrideResources(
+    private val base: Resources,
+    private val overrides: Map<Int, String>,
+) : Resources(base.assets, base.displayMetrics, base.configuration) {
+    override fun getString(id: Int): String =
+        overrides[id] ?: super.getString(id)
+
+    override fun getString(id: Int, vararg formatArgs: Any?): String =
+        overrides[id]?.let { String.format(it, *formatArgs) }
+            ?: super.getString(id, *formatArgs)
+
+    override fun getText(id: Int): CharSequence =
+        overrides[id] ?: super.getText(id)
+
+    override fun getText(id: Int, def: CharSequence?): CharSequence =
+        overrides[id] ?: super.getText(id, def)
+}
+
+/**
+ * [ContextWrapper] that returns the [StringOverrideResources] above. We pass
+ * an instance of this through Compose's `LocalContext` so the bundled
+ * `FaceLivenessDetector` resolves `stringResource(...)` against our overrides
+ * without the SDK needing to know the override mechanism exists.
+ */
+private class StringOverrideContext(
+    base: Context,
+    private val overrideResources: StringOverrideResources,
+) : ContextWrapper(base) {
+    override fun getResources(): Resources = overrideResources
+}
+
+/**
+ * Build the override-id map from the caller's [LivenessDisplayTextArgs]. Any
+ * key whose Android resource id can't be resolved (e.g. plugin built against
+ * a newer SDK that renamed the string) is silently dropped.
+ */
+private fun resolveDisplayTextOverrides(
+    context: Context,
+    args: LivenessDisplayTextArgs?,
+): Map<Int, String> {
+    if (args == null) return emptyMap()
+    val pairs = listOfNotNull(
+        args.centerFace?.let { DISPLAY_TEXT_KEY_MAP["centerFace"] to it },
+    )
+    if (pairs.isEmpty()) return emptyMap()
+    val pkg = context.packageName
+    return pairs.mapNotNull { (name, value) ->
+        if (name == null) return@mapNotNull null
+        val id = context.resources.getIdentifier(name, "string", pkg)
+        if (id == 0) null else id to value
+    }.toMap()
 }
 
 /**
@@ -325,22 +421,40 @@ class RekognitionLivenessPlugin(private val activity: Activity) : Plugin(activit
                         faceMovementAndLight = LivenessChallenge.FaceMovementAndLight,
                         faceMovement = LivenessChallenge.FaceMovement(camera = camera),
                     )
-                    FaceLivenessDetector(
-                        sessionId = args.sessionId,
-                        region = args.region,
-                        credentialsProvider = StaticCredentialsProvider(args.credentials),
-                        challengeOptions = challengeOptions,
-                        onComplete = { onResult("success", null) },
-                        onError = { error ->
-                            onResult(
-                                "failed",
-                                LivenessFailure(
-                                    code = error::class.simpleName ?: "FaceLivenessError",
-                                    message = error.message ?: error.toString(),
-                                ),
-                            )
-                        },
-                    )
+
+                    // Wrap LocalContext so the SDK's `stringResource(...)`
+                    // calls resolve against caller-supplied overrides for the
+                    // string ids we care about. No-op when displayText is
+                    // unset / empty — Compose just sees the original context.
+                    val baseContext = LocalContext.current
+                    val overrideContext = remember(args.displayText) {
+                        val overrides =
+                            resolveDisplayTextOverrides(baseContext, args.displayText)
+                        if (overrides.isEmpty()) baseContext
+                        else StringOverrideContext(
+                            baseContext,
+                            StringOverrideResources(baseContext.resources, overrides),
+                        )
+                    }
+
+                    CompositionLocalProvider(LocalContext provides overrideContext) {
+                        FaceLivenessDetector(
+                            sessionId = args.sessionId,
+                            region = args.region,
+                            credentialsProvider = StaticCredentialsProvider(args.credentials),
+                            challengeOptions = challengeOptions,
+                            onComplete = { onResult("success", null) },
+                            onError = { error ->
+                                onResult(
+                                    "failed",
+                                    LivenessFailure(
+                                        code = error::class.simpleName ?: "FaceLivenessError",
+                                        message = error.message ?: error.toString(),
+                                    ),
+                                )
+                            },
+                        )
+                    }
                 }
             }
         }

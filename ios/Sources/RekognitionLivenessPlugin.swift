@@ -25,6 +25,11 @@ class LivenessCredentialsArgs: Decodable {
     let expiresAt: String
 }
 
+class LivenessDisplayTextArgs: Decodable {
+    /// Overrides the SDK's "Center your face" prompt.
+    let centerFace: String?
+}
+
 class DetectLivenessArgs: Decodable {
     let sessionId: String
     let region: String
@@ -33,6 +38,77 @@ class DetectLivenessArgs: Decodable {
     /// created with `Settings.ChallengePreferences = [FaceMovementChallenge]`;
     /// the default `FaceMovementAndLightChallenge` forces front regardless.
     let camera: String?
+    /// Optional UI-text overrides applied for the duration of this session.
+    let displayText: LivenessDisplayTextArgs?
+}
+
+/// Maps platform-neutral display-text keys (the names exposed on the
+/// `displayText` JS arg) to the localizable keys Amplify Liveness Swift looks
+/// up via `NSLocalizedString(... bundle: .main, ...)`. Anything not in this
+/// map is silently ignored (forward-compat with future plugin keys the
+/// vendored SDK doesn't yet honour).
+private let displayTextKeyMap: [String: String] = [
+    "centerFace": "amplify_ui_liveness_center_your_face_text"
+]
+
+/// Process-wide override store consulted by the `Bundle.localizedString`
+/// swizzle below. Empty when no liveness session is active → swizzle becomes
+/// a no-op (just calls through to the original implementation).
+private final class LivenessLocalizedOverrides {
+    static let shared = LivenessLocalizedOverrides()
+    private let lock = NSLock()
+    private var values: [String: String] = [:]
+
+    func set(_ overrides: [String: String]) {
+        lock.lock(); defer { lock.unlock() }
+        values = overrides
+    }
+
+    func clear() {
+        lock.lock(); defer { lock.unlock() }
+        values.removeAll()
+    }
+
+    func lookup(_ key: String) -> String? {
+        lock.lock(); defer { lock.unlock() }
+        return values[key]
+    }
+}
+
+/// One-shot installer for the `Bundle.localizedString(forKey:value:table:)`
+/// method swizzle. Without this, the Amplify SDK's `NSLocalizedString` calls
+/// against `Bundle.main` only resolve from the host app's `Localizable.strings`
+/// — runtime overrides have no path in. We swap the instance method for our
+/// stub once at process start; the stub checks
+/// `LivenessLocalizedOverrides.shared` first, then falls through to the
+/// (now-renamed) original implementation. Idempotent via `dispatch_once`-style
+/// static let.
+private enum BundleLocalizedSwizzle {
+    static let install: Void = {
+        let cls: AnyClass = Bundle.self
+        let original = #selector(Bundle.localizedString(forKey:value:table:))
+        let replacement = #selector(Bundle.tplrl_localizedString(forKey:value:table:))
+        guard
+            let originalMethod = class_getInstanceMethod(cls, original),
+            let replacementMethod = class_getInstanceMethod(cls, replacement)
+        else { return }
+        method_exchangeImplementations(originalMethod, replacementMethod)
+    }()
+}
+
+extension Bundle {
+    @objc fileprivate func tplrl_localizedString(
+        forKey key: String,
+        value: String?,
+        table tableName: String?
+    ) -> String {
+        if let override = LivenessLocalizedOverrides.shared.lookup(key) {
+            return override
+        }
+        // Post-swizzle this calls the *original* implementation thanks to
+        // `method_exchangeImplementations` — naming notwithstanding.
+        return self.tplrl_localizedString(forKey: key, value: value, table: tableName)
+    }
 }
 
 class RekognitionLivenessPlugin: Plugin {
@@ -135,6 +211,20 @@ class RekognitionLivenessPlugin: Plugin {
             return
         }
 
+        // Install Bundle swizzle once, then load any caller-supplied UI-text
+        // overrides for this session. Cleared in `teardown()` so the swizzle
+        // becomes a no-op while no liveness UI is on screen.
+        _ = BundleLocalizedSwizzle.install
+        if let displayText = args.displayText {
+            var overrides: [String: String] = [:]
+            if let v = displayText.centerFace, let key = displayTextKeyMap["centerFace"] {
+                overrides[key] = v
+            }
+            LivenessLocalizedOverrides.shared.set(overrides)
+        } else {
+            LivenessLocalizedOverrides.shared.clear()
+        }
+
         let credentialsProvider = StaticAWSCredentialsProvider(args: args.credentials)
 
         // The session's challenge type (FaceMovementAndLight vs FaceMovement)
@@ -207,6 +297,11 @@ class RekognitionLivenessPlugin: Plugin {
             NotificationCenter.default.removeObserver(observer)
             willResignObserver = nil
         }
+
+        // Drop any per-session UI-text overrides — the next NSLocalizedString
+        // call from anywhere in the host app falls through to the SDK / app
+        // bundle as if the swizzle weren't there.
+        LivenessLocalizedOverrides.shared.clear()
     }
 }
 

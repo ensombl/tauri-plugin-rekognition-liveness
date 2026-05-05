@@ -21,7 +21,7 @@ tauri-plugin-rekognition-liveness = { path = "../../../packages/tauri-plugin-rek
 
 ```rust
 // src-tauri/src/lib.rs
-.plugin(tauri_plugin_face_liveness::init())
+.plugin(tauri_plugin_rekognition_liveness::init())
 ```
 
 ```json

@@ -14,6 +14,26 @@ pub struct LivenessCredentials {
     pub expires_at: String,
 }
 
+/// Optional UI-text overrides applied to the Amplify Liveness UI on this
+/// session only. Useful when the operator-handed-the-device wording ("Center
+/// your face") doesn't match the third-party-being-scanned context (e.g.
+/// rear-camera gate verification — the camera doesn't face the user holding
+/// the phone, it faces a driver).
+///
+/// Field naming is platform-neutral; the native bridges map each field to
+/// the matching string id on Android / localizable key on iOS. Any field
+/// left unset keeps the SDK's built-in copy.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LivenessDisplayText {
+    /// Replaces the SDK's "Center your face" prompt shown on the get-ready /
+    /// face-positioning screen.
+    /// Android string id: `amplify_ui_liveness_get_ready_center_face_label`
+    /// iOS localizable key: `amplify_ui_liveness_center_your_face_text`
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub center_face: Option<String>,
+}
+
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DetectLivenessRequest {
@@ -31,6 +51,10 @@ pub struct DetectLivenessRequest {
     /// the SDK forces front regardless of this hint.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera: Option<String>,
+    /// Optional UI-text overrides. See {@link LivenessDisplayText} for the
+    /// supported keys.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub display_text: Option<LivenessDisplayText>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, Default)]

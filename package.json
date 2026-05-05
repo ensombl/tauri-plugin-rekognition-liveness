@@ -1,6 +1,6 @@
 {
   "name": "@ensombl/tauri-plugin-rekognition-liveness-api",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "AWS Rekognition Face Liveness for Tauri 2 — native Android/iOS UI bindings.",
   "license": "MIT",
   "author": "SoSweetHam <sosweetham@gmail.com>",
@@ -32,6 +32,7 @@
     "scripts/setup.mjs",
     "scripts/bootstrap-ios-caches.sh",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "keywords": [
